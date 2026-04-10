@@ -4,8 +4,20 @@
 
 交互式 Git 分支管理工具 —— 浏览、搜索、创建、删除、切换分支，同时展示分支描述。
 
-zsh
-i18n
+![zsh](https://img.shields.io/badge/shell-zsh-blue)
+![i18n](https://img.shields.io/badge/i18n-zh%20%7C%20en-green)
+
+## 为什么需要它
+
+`git branch` 列出一堆名字 —— `fix-login`、`temp`、`feature-xx-v2` —— 没有上下文，不知道哪个是干什么的，也不知道上次用是什么时候。你明明记得昨天在改一个分支，但在三十个分支里根本找不到。切换要手打完整分支名，清理要一个一个 `git branch -d`。
+
+**git-branches** 用一个交互界面替代这套流程：
+
+- 分支按**最近使用时间排序**，刚用过的永远在最上面。
+- 每个分支旁边直接显示**描述信息** —— 不用猜 `feature-auth-refactor` 到底是什么。
+- 一个按键就能**切换**、**搜索**、**新建**或**批量删除**。
+
+它只是一个 shell 脚本，除了 zsh 和 git 之外零依赖，一条 `curl` 命令就装好。如果你每天都要在分支间来回切换，它能帮你省下实实在在的时间。
 
 ## 功能
 
@@ -20,19 +32,19 @@ i18n
 
 ## 安装
 
-```bash
-git clone https://github.com/<your-username>/git-branches.git ~/tools/git-branches
-```
-
-将脚本目录加入 `PATH`，编辑 `~/.zshrc` 或 `~/.bash_profile`：
+一行命令安装（同样适用于更新）：
 
 ```bash
-export PATH="$PATH:$HOME/tools/git-branches"
+curl -fsSL https://raw.githubusercontent.com/cyysilver/git-branches/main/git-branches -o /usr/local/bin/git-branches && chmod +x /usr/local/bin/git-branches
 ```
 
-重启终端或执行 `source ~/.zshrc`，即可使用 `git-branches`。
+> 如果 `/usr/local/bin` 需要权限，在命令前加 `sudo`，或安装到用户目录：
+>
+> ```bash
+> curl -fsSL https://raw.githubusercontent.com/cyysilver/git-branches/main/git-branches -o ~/.local/bin/git-branches && chmod +x ~/.local/bin/git-branches
+> ```
 
-脚本遵循 `git-xxx` 命名规范，会自动注册为 **git 子命令**：
+脚本遵循 `git-xxx` 命名规范，安装到 `PATH` 后自动注册为 **git 子命令**：
 
 ```bash
 git branches
@@ -40,22 +52,27 @@ git branches
 
 ### 别名配置（可选）
 
-添加短别名以加快输入：
+在 `~/.zshrc` 或 `~/.bash_profile` 中添加短别名：
 
 ```bash
 alias br='git-branches'
 alias branches='git-branches'
 ```
 
-这样你有三种方式调用：
+三种调用方式：
 
+| 命令 | 说明 |
+|------|------|
+| `br` | 最短，2 个字符 —— 日常推荐 |
+| `branches` | 完整语义 |
+| `git branches` | git 子命令风格（无需别名） |
 
-| 命令             | 说明               |
-| -------------- | ---------------- |
-| `br`           | 最短，2 个字符 —— 日常推荐 |
-| `branches`     | 完整语义             |
-| `git branches` | git 子命令风格（无需别名）  |
+### 其他方式：克隆仓库
 
+```bash
+git clone https://github.com/cyysilver/git-branches.git ~/tools/git-branches
+export PATH="$PATH:$HOME/tools/git-branches"  # 添加到 shell 配置文件
+```
 
 ## 使用
 
@@ -79,20 +96,18 @@ export GIT_BRANCHES_LANG=zh
 
 ## 快捷键
 
-
-| 按键        | 功能                      |
-| --------- | ----------------------- |
-| `j` / `↓` | 向下移动                    |
-| `k` / `↑` | 向上移动                    |
-| `Enter`   | 切换到选中的分支                |
-| `Space`   | 标记/取消标记分支（多选）           |
-| `/`       | 搜索/过滤分支                 |
-| `c`       | 创建新分支（附带描述输入）           |
-| `d`       | 删除选中分支，或删除所有标记的分支       |
-| `r`       | 编辑选中分支的描述（打开 `$EDITOR`） |
-| `Esc`     | 取消当前操作 / 清除标记 / 退出      |
-| `q`       | 退出                      |
-
+| 按键 | 功能 |
+|------|------|
+| `j` / `↓` | 向下移动 |
+| `k` / `↑` | 向上移动 |
+| `Enter` | 切换到选中的分支 |
+| `Space` | 标记/取消标记分支（多选） |
+| `/` | 搜索/过滤分支 |
+| `c` | 创建新分支（附带描述输入） |
+| `d` | 删除选中分支，或删除所有标记的分支 |
+| `r` | 编辑选中分支的描述（打开 `$EDITOR`） |
+| `Esc` | 取消当前操作 / 清除标记 / 退出 |
+| `q` | 退出 |
 
 ## 分支描述说明
 

@@ -4,8 +4,8 @@
 
 An interactive terminal UI for managing git branches — browse, search, create, delete, and switch branches, all with inline descriptions.
 
-zsh
-i18n
+![zsh](https://img.shields.io/badge/shell-zsh-blue)
+![i18n](https://img.shields.io/badge/i18n-zh%20%7C%20en-green)
 
 ## Why
 
