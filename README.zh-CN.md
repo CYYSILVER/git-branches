@@ -4,8 +4,8 @@
 
 交互式 Git 分支管理工具 —— 浏览、搜索、创建、删除、切换分支，同时展示分支描述。
 
-![zsh](https://img.shields.io/badge/shell-zsh-blue)
-![i18n](https://img.shields.io/badge/i18n-zh%20%7C%20en-green)
+zsh
+i18n
 
 ## 功能
 
@@ -20,19 +20,19 @@
 
 ## 安装
 
-一行命令安装（同样适用于更新）：
-
 ```bash
-curl -fsSL https://raw.githubusercontent.com/cyysilver/git-branches/main/git-branches -o /usr/local/bin/git-branches && chmod +x /usr/local/bin/git-branches
+git clone https://github.com/<your-username>/git-branches.git ~/tools/git-branches
 ```
 
-> 如果 `/usr/local/bin` 需要权限，在命令前加 `sudo`，或安装到用户目录：
->
-> ```bash
-> curl -fsSL https://raw.githubusercontent.com/cyysilver/git-branches/main/git-branches -o ~/.local/bin/git-branches && chmod +x ~/.local/bin/git-branches
-> ```
+将脚本目录加入 `PATH`，编辑 `~/.zshrc` 或 `~/.bash_profile`：
 
-脚本遵循 `git-xxx` 命名规范，安装到 `PATH` 后自动注册为 **git 子命令**：
+```bash
+export PATH="$PATH:$HOME/tools/git-branches"
+```
+
+重启终端或执行 `source ~/.zshrc`，即可使用 `git-branches`。
+
+脚本遵循 `git-xxx` 命名规范，会自动注册为 **git 子命令**：
 
 ```bash
 git branches
@@ -40,27 +40,22 @@ git branches
 
 ### 别名配置（可选）
 
-在 `~/.zshrc` 或 `~/.bash_profile` 中添加短别名：
+添加短别名以加快输入：
 
 ```bash
 alias br='git-branches'
 alias branches='git-branches'
 ```
 
-三种调用方式：
+这样你有三种方式调用：
 
-| 命令 | 说明 |
-|------|------|
-| `br` | 最短，2 个字符 —— 日常推荐 |
-| `branches` | 完整语义 |
-| `git branches` | git 子命令风格（无需别名） |
 
-### 其他方式：克隆仓库
+| 命令             | 说明               |
+| -------------- | ---------------- |
+| `br`           | 最短，2 个字符 —— 日常推荐 |
+| `branches`     | 完整语义             |
+| `git branches` | git 子命令风格（无需别名）  |
 
-```bash
-git clone https://github.com/cyysilver/git-branches.git ~/tools/git-branches
-export PATH="$PATH:$HOME/tools/git-branches"  # 添加到 shell 配置文件
-```
 
 ## 使用
 
@@ -84,18 +79,20 @@ export GIT_BRANCHES_LANG=zh
 
 ## 快捷键
 
-| 按键 | 功能 |
-|------|------|
-| `j` / `↓` | 向下移动 |
-| `k` / `↑` | 向上移动 |
-| `Enter` | 切换到选中的分支 |
-| `Space` | 标记/取消标记分支（多选） |
-| `/` | 搜索/过滤分支 |
-| `c` | 创建新分支（附带描述输入） |
-| `d` | 删除选中分支，或删除所有标记的分支 |
-| `r` | 编辑选中分支的描述（打开 `$EDITOR`） |
-| `Esc` | 取消当前操作 / 清除标记 / 退出 |
-| `q` | 退出 |
+
+| 按键        | 功能                      |
+| --------- | ----------------------- |
+| `j` / `↓` | 向下移动                    |
+| `k` / `↑` | 向上移动                    |
+| `Enter`   | 切换到选中的分支                |
+| `Space`   | 标记/取消标记分支（多选）           |
+| `/`       | 搜索/过滤分支                 |
+| `c`       | 创建新分支（附带描述输入）           |
+| `d`       | 删除选中分支，或删除所有标记的分支       |
+| `r`       | 编辑选中分支的描述（打开 `$EDITOR`） |
+| `Esc`     | 取消当前操作 / 清除标记 / 退出      |
+| `q`       | 退出                      |
+
 
 ## 分支描述说明
 

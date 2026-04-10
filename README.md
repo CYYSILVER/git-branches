@@ -4,8 +4,20 @@
 
 An interactive terminal UI for managing git branches — browse, search, create, delete, and switch branches, all with inline descriptions.
 
-![zsh](https://img.shields.io/badge/shell-zsh-blue)
-![i18n](https://img.shields.io/badge/i18n-zh%20%7C%20en-green)
+zsh
+i18n
+
+## Why
+
+You run `git branch` and get a wall of names — `fix-login`, `temp`, `feature-xx-v2` — with zero context about what they do or when you last touched them. You vaguely remember working on something yesterday but can't pick it out of thirty branches. Switching means typing (or tab-completing) the full name; cleaning up means running `git branch -d` one by one.
+
+**git-branches** replaces that workflow with a single interactive screen:
+
+- Branches are **sorted by last checkout time**, so what you were working on is always at the top.
+- Each branch shows its **description** right next to the name — no more guessing what `feature-auth-refactor` was about.
+- One keypress to **switch**, **search**, **create**, or **batch-delete**.
+
+It's a single shell script, zero dependencies beyond zsh + git, and installs in one `curl` command. If you spend any amount of your day juggling branches, this will save you real time.
 
 ## Features
 
@@ -49,11 +61,13 @@ alias branches='git-branches'
 
 Three ways to invoke:
 
-| Command | Description |
-|---------|-------------|
-| `br` | Shortest, 2 chars — best for daily use |
-| `branches` | Full semantic name |
+
+| Command        | Description                            |
+| -------------- | -------------------------------------- |
+| `br`           | Shortest, 2 chars — best for daily use |
+| `branches`     | Full semantic name                     |
 | `git branches` | Git subcommand style (no alias needed) |
+
 
 ### Alternative: clone the repo
 
@@ -84,18 +98,20 @@ export GIT_BRANCHES_LANG=zh
 
 ## Keybindings
 
-| Key | Action |
-|-----|--------|
-| `j` / `↓` | Move down |
-| `k` / `↑` | Move up |
-| `Enter` | Checkout selected branch |
-| `Space` | Toggle mark on branch (for multi-select) |
-| `/` | Search / filter branches |
-| `c` | Create new branch (with description prompt) |
-| `d` | Delete selected branch, or all marked branches |
-| `r` | Edit description of selected branch (`$EDITOR`) |
-| `Esc` | Cancel current action / clear marks / quit |
-| `q` | Quit |
+
+| Key       | Action                                          |
+| --------- | ----------------------------------------------- |
+| `j` / `↓` | Move down                                       |
+| `k` / `↑` | Move up                                         |
+| `Enter`   | Checkout selected branch                        |
+| `Space`   | Toggle mark on branch (for multi-select)        |
+| `/`       | Search / filter branches                        |
+| `c`       | Create new branch (with description prompt)     |
+| `d`       | Delete selected branch, or all marked branches  |
+| `r`       | Edit description of selected branch (`$EDITOR`) |
+| `Esc`     | Cancel current action / clear marks / quit      |
+| `q`       | Quit                                            |
+
 
 ## How descriptions work
 
