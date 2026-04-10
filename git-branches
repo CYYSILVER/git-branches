@@ -101,7 +101,7 @@ _vtrunc() {
     local s=$1 max=$2
     (( max < 1 )) && { REPLY=""; return }
     (( ${#s} * 2 <= max )) && { REPLY=$s; return }
-    local w=0 ch cw
+    local w=0 ch cw i
     for (( i = 1; i <= ${#s}; i++ )); do
         ch=${s[$i]}
         cw=1; (( #ch >= 0x2E80 )) && cw=2
