@@ -1,0 +1,483 @@
+#!/usr/bin/env zsh
+#
+# git-branches — interactive branch selector with descriptions
+#
+#   j / k / ↑ / ↓   navigate
+#   enter            checkout selected branch
+#   space            toggle mark for multi-select
+#   c                create new branch (with description)
+#   d                delete selected / marked branches
+#   r                edit description for selected branch
+#   /                search / filter branches
+#   q / esc          quit
+
+setopt LOCAL_OPTIONS NO_NOTIFY NO_MONITOR 2>/dev/null
+
+# ─── Appearance ───────────────────────────────────────
+typeset -r _R=$'\e[0m'
+typeset -r _B=$'\e[1m'
+typeset -r _D=$'\e[2m'
+typeset -r _FG=$'\e[32m'
+typeset -r _FC=$'\e[36m'
+typeset -r _FY=$'\e[33m'
+typeset -r _FR=$'\e[31m'
+typeset -r _FW=$'\e[97m'
+typeset -r _HL=$'\e[48;5;238m'
+typeset -r _HC=$'\e[48;5;23m'
+typeset -r _HIDE=$'\e[?25l'
+typeset -r _SHOW=$'\e[?25h'
+
+# ─── State ────────────────────────────────────────────
+typeset -ga  _br _desc _fidx
+typeset -gA  _marked
+typeset -g   _cur _query="" _input="" _action _mode=normal _msg="" _newbr=""
+typeset -gi  _sel=1 _drawn=0
+typeset -g   _saved
+
+# ─── Load branches sorted by most-recent checkout ────
+_load() {
+    _br=() _desc=()
+    _cur=$(git symbolic-ref --short HEAD 2>/dev/null) || {
+        print -u2 "fatal: not a git repository"; return 1
+    }
+
+    typeset -A branch_set
+    typeset -a all
+    all=("${(@f)$(git branch --format='%(refname:short)')}")
+    for b in $all; do branch_set[$b]=1; done
+
+    typeset -A desc_map
+    local line key val name
+    while IFS= read -r line; do
+        key=${line%% *}; val=${line#* }
+        name=${key#branch.}; name=${name%.description}
+        desc_map[$name]="${val%%$'\n'*}"
+    done < <(git config --get-regexp '^branch\..*\.description' 2>/dev/null)
+
+    typeset -a recent
+    recent=("${(@f)$(
+        git reflog show -n 200 --format='%gs' HEAD 2>/dev/null \
+        | awk '/^checkout:/ { sub(/^checkout: moving from .* to /, ""); if (!s[$0]++) print }'
+    )}")
+
+    typeset -A seen
+    for b in $recent; do
+        (( ${+branch_set[$b]} )) || continue
+        (( ${+seen[$b]} )) && continue
+        _br+=("$b"); seen[$b]=1
+    done
+    for b in $all; do
+        (( ${+seen[$b]} )) && continue
+        _br+=("$b"); seen[$b]=1
+    done
+
+    for b in $_br; do
+        _desc+=("${desc_map[$b]:-}")
+    done
+}
+
+# ─── Filter branches by query ────────────────────────
+_apply_filter() {
+    _fidx=()
+    if [[ -z "$_query" ]]; then
+        for (( i = 1; i <= ${#_br}; i++ )); do _fidx+=($i); done
+    else
+        local q=${_query:l}
+        for (( i = 1; i <= ${#_br}; i++ )); do
+            [[ "${_br[$i]:l}" == *"$q"* || "${_desc[$i]:l}" == *"$q"* ]] && _fidx+=($i)
+        done
+    fi
+    (( _sel > ${#_fidx} )) && _sel=${#_fidx}
+    (( _sel < 1 && ${#_fidx} > 0 )) && _sel=1
+}
+
+# ─── Move selection to a named branch ────────────────
+_select_branch() {
+    for (( i = 1; i <= ${#_fidx}; i++ )); do
+        [[ "${_br[$_fidx[$i]]}" == "$1" ]] && { _sel=$i; return }
+    done
+}
+
+# ─── Draw ─────────────────────────────────────────────
+_draw() {
+    local cols=$COLUMNS rows=$LINES
+    local ftotal=${#_fidx}
+    local prev=$_drawn n=0
+    local mcnt=${#_marked}
+
+    (( prev > 0 )) && printf '\e[%dA' "$prev"
+
+    # Header — context-aware hints
+    printf '\e[2K'
+    case $_mode in
+        search)
+            printf '  %s%sGit Branches%s  %s· ↑↓ navigate · enter checkout · esc cancel%s\n' \
+                "$_B" "$_FC" "$_R" "$_D" "$_R" ;;
+        create)
+            printf '  %s%sGit Branches%s  %s· enter confirm · esc cancel%s\n' \
+                "$_B" "$_FC" "$_R" "$_D" "$_R" ;;
+        create_desc)
+            printf '  %s%sGit Branches%s  %s· enter confirm · esc skip%s\n' \
+                "$_B" "$_FC" "$_R" "$_D" "$_R" ;;
+        delete|delete_multi)
+            printf '  %s%sGit Branches%s  %s· y confirm delete · any other key cancel%s\n' \
+                "$_B" "$_FC" "$_R" "$_D" "$_R" ;;
+        *)
+            printf '  %s%sGit Branches%s  %s· j/k ↑↓ · ⏎ checkout · ␣ mark · /search · c new · d del · r desc · q quit%s\n' \
+                "$_B" "$_FC" "$_R" "$_D" "$_R" ;;
+    esac
+    (( n++ ))
+
+    # Separator
+    printf '\e[2K  %s' "$_D"
+    local sw=$(( cols - 4 )); (( sw > 80 )) && sw=80
+    printf '%.0s─' {1..$sw}
+    printf '%s\n' "$_R"
+    (( n++ ))
+
+    # Compute max visible rows
+    local max_vis=$(( rows - 5 ))
+    [[ $_mode != normal ]] && (( max_vis-- ))
+    [[ -n "$_msg" ]] && (( max_vis-- ))
+    (( max_vis < 3 )) && max_vis=3
+
+    if (( ftotal == 0 )); then
+        printf '\e[2K  %sNo matching branches%s\n' "$_D" "$_R"
+        (( n++ ))
+    else
+        local vs=1 ve=$ftotal
+        if (( ftotal > max_vis )); then
+            vs=$(( _sel - max_vis / 2 ))
+            (( vs < 1 )) && vs=1
+            ve=$(( vs + max_vis - 1 ))
+            (( ve > ftotal )) && { ve=$ftotal; vs=$(( ve - max_vis + 1 )); (( vs < 1 )) && vs=1 }
+        fi
+
+        local nw=0
+        for (( i = vs; i <= ve; i++ )); do
+            (( ${#_br[$_fidx[$i]]} > nw )) && nw=${#_br[$_fidx[$i]]}
+        done
+        (( nw < 15 )) && nw=15; (( nw > 40 )) && nw=40
+
+        local dw=$(( cols - nw - 10 ))
+        (( dw < 5 )) && dw=5
+
+        for (( i = vs; i <= ve; i++ )); do
+            printf '\e[2K'
+            local ri=$_fidx[$i]
+            local b=${_br[$ri]} d=${_desc[$ri]}
+            local ic=0 is=0 im=0
+            [[ "$b" == "$_cur" ]] && ic=1
+            (( i == _sel )) && is=1
+            (( ${+_marked[$b]} )) && im=1
+            (( ${#d} > dw )) && d="${d[1,$((dw-1))]}…"
+
+            local mk=" "
+            (( ic )) && mk="*"
+            (( im )) && mk="●"
+
+            if (( is )); then
+                local bg=$_HL; (( ic )) && bg=$_HC
+                printf ' %s %s %-*s  %s%s\e[K%s\n' \
+                    "$bg$_FW$_B" "$mk" "$nw" "$b" "$_FY" "$d" "$_R"
+            elif (( ic )); then
+                printf '  %s%s %-*s%s  %s%s%s\n' \
+                    "$_FG$_B" "$mk" "$nw" "$b" "$_R" "$_D" "$d" "$_R"
+            elif (( im )); then
+                printf '  %s%s%s %-*s  %s%s%s\n' \
+                    "$_FR" "$mk" "$_R" "$nw" "$b" "$_D" "$d" "$_R"
+            else
+                printf '    %-*s  %s%s%s\n' "$nw" "$b" "$_D" "$d" "$_R"
+            fi
+            (( n++ ))
+        done
+    fi
+
+    # Status message (one-shot)
+    if [[ -n "$_msg" ]]; then
+        printf '\e[2K  %s%s%s\n' "$_FY" "$_msg" "$_R"
+        (( n++ ))
+    fi
+
+    # Footer / input prompt
+    printf '\e[2K'
+    case $_mode in
+        search)
+            printf '  %s/%s%s%s▏%s\n' "$_FY" "$_R" "$_query" "$_D" "$_R" ;;
+        create)
+            printf '  %sBranch name:%s %s%s▏%s\n' "$_FY" "$_R" "$_input" "$_D" "$_R" ;;
+        create_desc)
+            printf '  %sDescription:%s %s%s▏%s\n' "$_FY" "$_R" "$_input" "$_D" "$_R" ;;
+        delete)
+            printf '  %sDelete "%s" ?%s (y/n)\n' "$_FR" "${_br[$_fidx[$_sel]]}" "$_R" ;;
+        delete_multi)
+            printf '  %sDelete %d marked branches ?%s (y/n)\n' "$_FR" "$mcnt" "$_R" ;;
+        *)
+            if (( mcnt > 0 )); then
+                printf '  %s%d marked · d delete marked · esc clear marks%s\n' "$_FY" "$mcnt" "$_R"
+            elif (( ftotal > 0 && ftotal < ${#_br} )); then
+                printf '  %s(%d/%d · filter: "%s" · esc clear)%s\n' "$_D" "$_sel" "$ftotal" "$_query" "$_R"
+            elif (( ftotal > max_vis )); then
+                printf '  %s(%d/%d)%s\n' "$_D" "$_sel" "$ftotal" "$_R"
+            else
+                printf '\n'
+            fi ;;
+    esac
+    (( n++ ))
+
+    _drawn=$n
+
+    # Wipe stale lines from a previous taller frame
+    if (( n < prev )); then
+        repeat $(( prev - n )) { printf '\e[2K\n' }
+        printf '\e[%dA' "$(( prev - n ))"
+    fi
+}
+
+# ─── Clear drawn UI ──────────────────────────────────
+_clear() {
+    (( _drawn )) || return 0
+    printf '\e[%dA' "$_drawn"
+    repeat $_drawn { printf '\e[2K\n' }
+    printf '\e[%dA' "$_drawn"
+    _drawn=0
+}
+
+# ─── Restore terminal ────────────────────────────────
+_cleanup() {
+    printf "$_SHOW"
+    [[ -n "$_saved" ]] && stty "$_saved" 2>/dev/null
+}
+
+# ─── Read key → _action ──────────────────────────────
+_read_key() {
+    local c
+    read -s -k 1 c || { _action=quit; return }
+
+    if [[ "$c" == $'\e' ]]; then
+        read -s -k 1 -t 0.05 c 2>/dev/null || {
+            [[ $_mode != normal ]] && { _action=cancel; return }
+            _action=quit; return
+        }
+        if [[ "$c" == "[" ]]; then
+            read -s -k 1 -t 0.05 c 2>/dev/null || {
+                [[ $_mode != normal ]] && { _action=cancel; return }
+                _action=quit; return
+            }
+            [[ "$c" == A ]] && { _action=up; return }
+            [[ "$c" == B ]] && { _action=down; return }
+        fi
+        [[ $_mode != normal ]] && { _action=cancel; return }
+        _action=quit; return
+    fi
+
+    case $_mode in
+        search|create|create_desc)
+            case "$c" in
+                $'\n')          _action=enter ;;
+                $'\x7f'|$'\b') _action=backspace ;;
+                *)              _action="c$c" ;;
+            esac ;;
+        delete|delete_multi)
+            [[ "$c" == y || "$c" == Y ]] && { _action=confirm; return }
+            _action=cancel ;;
+        *)
+            case "$c" in
+                j) _action=down;; k) _action=up;;
+                ' ') _action=toggle;;
+                r) _action=rename;; q) _action=quit;;
+                d) _action=delete;; c) _action=create;;
+                /) _action=search;;
+                $'\n') _action=enter;; *) _action=other;;
+            esac ;;
+    esac
+}
+
+# ─── Main ─────────────────────────────────────────────
+main() {
+    [[ -t 0 && -t 1 ]] || { print -u2 "fatal: requires an interactive terminal"; return 1 }
+    _load || return 1
+    (( ${#_br} )) || { print -u2 "No branches found"; return 1 }
+
+    _apply_filter
+    _select_branch "$_cur"
+
+    _saved=$(stty -g 2>/dev/null)
+    stty -echo 2>/dev/null
+    printf "$_HIDE"
+    trap _cleanup EXIT INT TERM HUP
+
+    while true; do
+        _draw
+        _msg=""
+        _read_key
+
+        local ftotal=${#_fidx}
+        case $_action in
+
+        # ── Navigation ────────────────────────────────
+        up)    (( _sel > 1 ))      && (( _sel-- )) ;;
+        down)  (( _sel < ftotal )) && (( _sel++ )) ;;
+
+        # ── Toggle mark for multi-select ──────────────
+        toggle)
+            (( ftotal == 0 )) && continue
+            local ri=$_fidx[$_sel]
+            local b=${_br[$ri]}
+            if [[ "$b" == "$_cur" ]]; then
+                _msg="Cannot mark the current branch"
+                continue
+            fi
+            if (( ${+_marked[$b]} )); then
+                unset "_marked[$b]"
+            else
+                _marked[$b]=1
+            fi
+            (( _sel < ftotal )) && (( _sel++ )) ;;
+
+        # ── Enter (context-dependent) ─────────────────
+        enter)
+            case $_mode in
+                create)
+                    [[ -z "$_input" ]] && continue
+                    local out
+                    out=$(git branch "$_input" 2>&1)
+                    if (( $? )); then
+                        _msg="${out#fatal: }"
+                        _mode=normal; _input=""
+                    else
+                        _newbr="$_input"
+                        _mode=create_desc; _input=""
+                    fi ;;
+                create_desc)
+                    [[ -n "$_input" ]] && git config "branch.$_newbr.description" "$_input"
+                    _msg="Created '$_newbr'"
+                    _mode=normal; _input=""
+                    _load; _query=""; _apply_filter
+                    _select_branch "$_newbr" ;;
+                *)
+                    (( ftotal == 0 )) && continue
+                    local ri=$_fidx[$_sel]
+                    _clear; _cleanup; trap - EXIT INT TERM HUP
+                    if [[ "${_br[$ri]}" != "$_cur" ]]; then
+                        git checkout "${_br[$ri]}"
+                    else
+                        print "Already on '${_br[$ri]}'"
+                    fi
+                    return 0 ;;
+            esac ;;
+
+        # ── Start search ──────────────────────────────
+        search)  _mode=search; _query=""; _apply_filter ;;
+
+        # ── Create branch ─────────────────────────────
+        create)  _mode=create; _input="" ;;
+
+        # ── Delete branch(es) ─────────────────────────
+        delete)
+            if (( ${#_marked} > 0 )); then
+                _mode=delete_multi
+            else
+                (( ftotal == 0 )) && continue
+                local ri=$_fidx[$_sel]
+                if [[ "${_br[$ri]}" == "$_cur" ]]; then
+                    _msg="Cannot delete the current branch"
+                else
+                    _mode=delete
+                fi
+            fi ;;
+
+        # ── Delete confirmed ──────────────────────────
+        confirm)
+            case $_mode in
+                delete)
+                    local ri=$_fidx[$_sel]
+                    local out
+                    out=$(git branch -d "${_br[$ri]}" 2>&1)
+                    if (( $? )); then
+                        _msg="${out#error: }"
+                    else
+                        _msg="Deleted '${_br[$ri]}'"
+                    fi ;;
+                delete_multi)
+                    local ok=0 fail=0
+                    for b in ${(k)_marked}; do
+                        git branch -d "$b" 2>/dev/null && (( ok++ )) || (( fail++ ))
+                    done
+                    _marked=()
+                    _msg="Deleted $ok branch(es)"
+                    (( fail )) && _msg+=", $fail failed" ;;
+            esac
+            _mode=normal
+            _load; _apply_filter
+            (( _sel > ${#_fidx} )) && _sel=${#_fidx} ;;
+
+        # ── Cancel current mode ───────────────────────
+        cancel)
+            case $_mode in
+                search)
+                    _mode=normal; _query=""
+                    _apply_filter; _select_branch "$_cur" ;;
+                create)
+                    _mode=normal; _input="" ;;
+                create_desc)
+                    _mode=normal; _input=""
+                    _load; _query=""; _apply_filter
+                    _select_branch "$_newbr" ;;
+                delete|delete_multi)
+                    _mode=normal ;;
+            esac ;;
+
+        # ── Text input: backspace ─────────────────────
+        backspace)
+            case $_mode in
+                search)
+                    if [[ -n "$_query" ]]; then
+                        _query=${_query[1,-2]}; _apply_filter
+                    else
+                        _mode=normal; _apply_filter; _select_branch "$_cur"
+                    fi ;;
+                create|create_desc)
+                    [[ -n "$_input" ]] && _input=${_input[1,-2]} ;;
+            esac ;;
+
+        # ── Text input: character ─────────────────────
+        c*)
+            case $_mode in
+                search)              _query+="${_action[2,-1]}"; _apply_filter ;;
+                create|create_desc)  _input+="${_action[2,-1]}" ;;
+            esac ;;
+
+        # ── Edit description (normal mode) ────────────
+        rename)
+            [[ $_mode != normal ]] && continue
+            (( ftotal == 0 )) && continue
+            local ri=$_fidx[$_sel]
+            _clear
+            printf "$_SHOW"
+            stty "$_saved" 2>/dev/null
+            git branch --edit-description "${_br[$ri]}"
+            local d
+            d=$(git config "branch.${_br[$ri]}.description" 2>/dev/null) || d=""
+            _desc[$ri]="${d%%$'\n'*}"
+            _saved=$(stty -g 2>/dev/null)
+            stty -echo 2>/dev/null
+            printf "$_HIDE"
+            _drawn=0 ;;
+
+        # ── Quit ──────────────────────────────────────
+        quit)
+            if (( ${#_marked} > 0 )); then
+                _marked=()
+            elif [[ -n "$_query" ]]; then
+                _mode=normal; _query=""
+                _apply_filter; _select_branch "$_cur"
+            else
+                _clear; return 0
+            fi ;;
+
+        esac
+    done
+}
+
+main "$@"
