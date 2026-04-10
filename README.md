@@ -21,25 +21,46 @@ An interactive terminal UI for managing git branches — browse, search, create,
 ## Installation
 
 ```bash
-git clone https://github.com/<your-username>/git-branches.git ~/Project/tools/git-branches
+git clone https://github.com/<your-username>/git-branches.git ~/tools/git-branches
 ```
 
-Add to your shell config (`~/.zshrc` or `~/.bash_profile`):
+Add the script directory to your `PATH` in `~/.zshrc` or `~/.bash_profile`:
 
 ```bash
-function branches() {
-    ~/Project/tools/git-branches/git-branches "$@"
-}
+export PATH="$PATH:$HOME/tools/git-branches"
 ```
 
-Then reload your shell or run `source ~/.zshrc`.
+Reload your shell (`source ~/.zshrc`), and `git-branches` is ready to use.
+
+Since the script follows the `git-xxx` naming convention, it is automatically available as a **git subcommand**:
+
+```bash
+git branches
+```
+
+### Aliases (optional)
+
+Add short aliases for faster access:
+
+```bash
+alias br='git-branches'
+alias branches='git-branches'
+```
+
+Now you have three ways to invoke the tool:
+
+| Command | Description |
+|---------|-------------|
+| `br` | Shortest, 2 chars — best for daily use |
+| `branches` | Full semantic name |
+| `git branches` | Git subcommand style (no alias needed) |
 
 ## Usage
 
 Navigate to any git repository and run:
 
 ```bash
-branches
+git branches    # or: br / branches
 ```
 
 ### Language

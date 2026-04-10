@@ -21,25 +21,46 @@
 ## 安装
 
 ```bash
-git clone https://github.com/<your-username>/git-branches.git ~/Project/tools/git-branches
+git clone https://github.com/<your-username>/git-branches.git ~/tools/git-branches
 ```
 
-在 shell 配置文件（`~/.zshrc` 或 `~/.bash_profile`）中添加：
+将脚本目录加入 `PATH`，编辑 `~/.zshrc` 或 `~/.bash_profile`：
 
 ```bash
-function branches() {
-    ~/Project/tools/git-branches/git-branches "$@"
-}
+export PATH="$PATH:$HOME/tools/git-branches"
 ```
 
-然后重启终端或执行 `source ~/.zshrc`。
+重启终端或执行 `source ~/.zshrc`，即可使用 `git-branches`。
+
+脚本遵循 `git-xxx` 命名规范，会自动注册为 **git 子命令**：
+
+```bash
+git branches
+```
+
+### 别名配置（可选）
+
+添加短别名以加快输入：
+
+```bash
+alias br='git-branches'
+alias branches='git-branches'
+```
+
+这样你有三种方式调用：
+
+| 命令 | 说明 |
+|------|------|
+| `br` | 最短，2 个字符 —— 日常推荐 |
+| `branches` | 完整语义 |
+| `git branches` | git 子命令风格（无需别名） |
 
 ## 使用
 
 进入任意 git 仓库目录，执行：
 
 ```bash
-branches
+git branches    # 或: br / branches
 ```
 
 ### 语言设置
