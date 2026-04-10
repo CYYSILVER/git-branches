@@ -20,19 +20,19 @@ An interactive terminal UI for managing git branches — browse, search, create,
 
 ## Installation
 
-```bash
-git clone https://github.com/<your-username>/git-branches.git ~/tools/git-branches
-```
-
-Add the script directory to your `PATH` in `~/.zshrc` or `~/.bash_profile`:
+One-line install (also works for updates):
 
 ```bash
-export PATH="$PATH:$HOME/tools/git-branches"
+curl -fsSL https://raw.githubusercontent.com/cyysilver/git-branches/main/git-branches -o /usr/local/bin/git-branches && chmod +x /usr/local/bin/git-branches
 ```
 
-Reload your shell (`source ~/.zshrc`), and `git-branches` is ready to use.
+> If `/usr/local/bin` requires sudo, prepend `sudo` to the command, or install to a user-local directory:
+>
+> ```bash
+> curl -fsSL https://raw.githubusercontent.com/cyysilver/git-branches/main/git-branches -o ~/.local/bin/git-branches && chmod +x ~/.local/bin/git-branches
+> ```
 
-Since the script follows the `git-xxx` naming convention, it is automatically available as a **git subcommand**:
+Since the script follows the `git-xxx` naming convention, it is automatically available as a **git subcommand** once in `PATH`:
 
 ```bash
 git branches
@@ -40,20 +40,27 @@ git branches
 
 ### Aliases (optional)
 
-Add short aliases for faster access:
+Add short aliases to your `~/.zshrc` or `~/.bash_profile`:
 
 ```bash
 alias br='git-branches'
 alias branches='git-branches'
 ```
 
-Now you have three ways to invoke the tool:
+Three ways to invoke:
 
 | Command | Description |
 |---------|-------------|
 | `br` | Shortest, 2 chars — best for daily use |
 | `branches` | Full semantic name |
 | `git branches` | Git subcommand style (no alias needed) |
+
+### Alternative: clone the repo
+
+```bash
+git clone https://github.com/cyysilver/git-branches.git ~/tools/git-branches
+export PATH="$PATH:$HOME/tools/git-branches"  # add to your shell config
+```
 
 ## Usage
 

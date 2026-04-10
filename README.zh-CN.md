@@ -20,19 +20,19 @@
 
 ## 安装
 
-```bash
-git clone https://github.com/<your-username>/git-branches.git ~/tools/git-branches
-```
-
-将脚本目录加入 `PATH`，编辑 `~/.zshrc` 或 `~/.bash_profile`：
+一行命令安装（同样适用于更新）：
 
 ```bash
-export PATH="$PATH:$HOME/tools/git-branches"
+curl -fsSL https://raw.githubusercontent.com/cyysilver/git-branches/main/git-branches -o /usr/local/bin/git-branches && chmod +x /usr/local/bin/git-branches
 ```
 
-重启终端或执行 `source ~/.zshrc`，即可使用 `git-branches`。
+> 如果 `/usr/local/bin` 需要权限，在命令前加 `sudo`，或安装到用户目录：
+>
+> ```bash
+> curl -fsSL https://raw.githubusercontent.com/cyysilver/git-branches/main/git-branches -o ~/.local/bin/git-branches && chmod +x ~/.local/bin/git-branches
+> ```
 
-脚本遵循 `git-xxx` 命名规范，会自动注册为 **git 子命令**：
+脚本遵循 `git-xxx` 命名规范，安装到 `PATH` 后自动注册为 **git 子命令**：
 
 ```bash
 git branches
@@ -40,20 +40,27 @@ git branches
 
 ### 别名配置（可选）
 
-添加短别名以加快输入：
+在 `~/.zshrc` 或 `~/.bash_profile` 中添加短别名：
 
 ```bash
 alias br='git-branches'
 alias branches='git-branches'
 ```
 
-这样你有三种方式调用：
+三种调用方式：
 
 | 命令 | 说明 |
 |------|------|
 | `br` | 最短，2 个字符 —— 日常推荐 |
 | `branches` | 完整语义 |
 | `git branches` | git 子命令风格（无需别名） |
+
+### 其他方式：克隆仓库
+
+```bash
+git clone https://github.com/cyysilver/git-branches.git ~/tools/git-branches
+export PATH="$PATH:$HOME/tools/git-branches"  # 添加到 shell 配置文件
+```
 
 ## 使用
 
