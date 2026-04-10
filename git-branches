@@ -96,6 +96,24 @@ _i18n_init() {
     esac
 }
 
+# ─── Visual-width-aware truncation (CJK = 2 columns) ─
+_vtrunc() {
+    local s=$1 max=$2
+    (( max < 1 )) && { REPLY=""; return }
+    (( ${#s} * 2 <= max )) && { REPLY=$s; return }
+    local w=0 ch cw
+    for (( i = 1; i <= ${#s}; i++ )); do
+        ch=${s[$i]}
+        cw=1; (( #ch >= 0x2E80 )) && cw=2
+        if (( w + cw + 1 > max )); then
+            REPLY="${s[1,$((i-1))]}…"
+            return
+        fi
+        (( w += cw ))
+    done
+    REPLY=$s
+}
+
 # ─── State ────────────────────────────────────────────
 typeset -ga  _br _desc _fidx
 typeset -gA  _marked
@@ -186,6 +204,8 @@ _draw() {
         delete|delete_multi) hints=$_L[hint_delete] ;;
         *)                hints=$_L[hint_normal] ;;
     esac
+    local hints_max=$(( cols - ${#_L[title]} * 2 - 6 ))
+    _vtrunc "$hints" "$hints_max"; hints=$REPLY
     printf '  %s%s%s%s  %s%s%s\n' "$_B" "$_FC" "$_L[title]" "$_R" "$_D" "$hints" "$_R"
     (( n++ ))
 
@@ -231,7 +251,7 @@ _draw() {
             [[ "$b" == "$_cur" ]] && ic=1
             (( i == _sel )) && is=1
             (( ${+_marked[$b]} )) && im=1
-            (( ${#d} > dw )) && d="${d[1,$((dw-1))]}…"
+            _vtrunc "$d" "$dw"; d=$REPLY
 
             local mk=" "
             (( ic )) && mk="*"
