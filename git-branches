@@ -10,6 +10,8 @@
 #   r                edit description for selected branch
 #   /                search / filter branches
 #   q / esc          quit
+#
+# Language: set GIT_BRANCHES_LANG=en for English (default: zh)
 
 setopt LOCAL_OPTIONS NO_NOTIFY NO_MONITOR 2>/dev/null
 
@@ -27,6 +29,73 @@ typeset -r _HC=$'\e[48;5;23m'
 typeset -r _HIDE=$'\e[?25l'
 typeset -r _SHOW=$'\e[?25h'
 
+# ─── i18n ─────────────────────────────────────────────
+typeset -gA _L
+
+_i18n_zh() {
+    _L=(
+        title            "Git 分支"
+        hint_normal      "· j/k ↑↓ 移动 · ⏎ 切换 · ␣ 标记 · / 搜索 · c 新建 · d 删除 · r 描述 · q 退出"
+        hint_search      "· ↑↓ 移动 · 回车切换 · esc 取消"
+        hint_create      "· 回车确认 · esc 取消"
+        hint_create_desc "· 回车确认 · esc 跳过"
+        hint_delete      "· y 确认删除 · 其他键取消"
+        no_match         "没有匹配的分支"
+        branch_name      "分支名称:"
+        description      "分支描述:"
+        delete_single    '删除 "%s" ?'
+        delete_multi     '删除 %d 个标记的分支 ?'
+        marked_footer    '%d 个已标记 · d 删除标记 · esc 清除标记'
+        filter_footer    '(%d/%d · 筛选: "%s" · esc 清除)'
+        msg_no_mark_cur  "无法标记当前分支"
+        msg_no_del_cur   "无法删除当前分支"
+        msg_created      "已创建 '%s'"
+        msg_deleted      "已删除 '%s'"
+        msg_deleted_n    '已删除 %d 个分支'
+        msg_failed       ', %d 个失败'
+        msg_already_on   "已在 '%s' 分支上"
+        err_not_repo     "错误: 不是 git 仓库"
+        err_no_branch    "没有找到分支"
+        err_not_tty      "错误: 需要交互式终端"
+    )
+}
+
+_i18n_en() {
+    _L=(
+        title            "Git Branches"
+        hint_normal      "· j/k ↑↓ · ⏎ checkout · ␣ mark · /search · c new · d del · r desc · q quit"
+        hint_search      "· ↑↓ navigate · enter checkout · esc cancel"
+        hint_create      "· enter confirm · esc cancel"
+        hint_create_desc "· enter confirm · esc skip"
+        hint_delete      "· y confirm delete · any other key cancel"
+        no_match         "No matching branches"
+        branch_name      "Branch name:"
+        description      "Description:"
+        delete_single    'Delete "%s" ?'
+        delete_multi     'Delete %d marked branches ?'
+        marked_footer    '%d marked · d delete marked · esc clear marks'
+        filter_footer    '(%d/%d · filter: "%s" · esc clear)'
+        msg_no_mark_cur  "Cannot mark the current branch"
+        msg_no_del_cur   "Cannot delete the current branch"
+        msg_created      "Created '%s'"
+        msg_deleted      "Deleted '%s'"
+        msg_deleted_n    'Deleted %d branch(es)'
+        msg_failed       ', %d failed'
+        msg_already_on   "Already on '%s'"
+        err_not_repo     "fatal: not a git repository"
+        err_no_branch    "No branches found"
+        err_not_tty      "fatal: requires an interactive terminal"
+    )
+}
+
+_i18n_init() {
+    local lang=${GIT_BRANCHES_LANG:-${LC_ALL:-${LC_MESSAGES:-${LANG:-}}}}
+    case ${lang:l} in
+        en*) _i18n_en ;;
+        *)   _i18n_zh ;;
+    esac
+}
+
 # ─── State ────────────────────────────────────────────
 typeset -ga  _br _desc _fidx
 typeset -gA  _marked
@@ -38,7 +107,7 @@ typeset -g   _saved
 _load() {
     _br=() _desc=()
     _cur=$(git symbolic-ref --short HEAD 2>/dev/null) || {
-        print -u2 "fatal: not a git repository"; return 1
+        print -u2 "$_L[err_not_repo]"; return 1
     }
 
     typeset -A branch_set
@@ -107,25 +176,17 @@ _draw() {
 
     (( prev > 0 )) && printf '\e[%dA' "$prev"
 
-    # Header — context-aware hints
+    # Header
     printf '\e[2K'
+    local hints
     case $_mode in
-        search)
-            printf '  %s%sGit Branches%s  %s· ↑↓ navigate · enter checkout · esc cancel%s\n' \
-                "$_B" "$_FC" "$_R" "$_D" "$_R" ;;
-        create)
-            printf '  %s%sGit Branches%s  %s· enter confirm · esc cancel%s\n' \
-                "$_B" "$_FC" "$_R" "$_D" "$_R" ;;
-        create_desc)
-            printf '  %s%sGit Branches%s  %s· enter confirm · esc skip%s\n' \
-                "$_B" "$_FC" "$_R" "$_D" "$_R" ;;
-        delete|delete_multi)
-            printf '  %s%sGit Branches%s  %s· y confirm delete · any other key cancel%s\n' \
-                "$_B" "$_FC" "$_R" "$_D" "$_R" ;;
-        *)
-            printf '  %s%sGit Branches%s  %s· j/k ↑↓ · ⏎ checkout · ␣ mark · /search · c new · d del · r desc · q quit%s\n' \
-                "$_B" "$_FC" "$_R" "$_D" "$_R" ;;
+        search)           hints=$_L[hint_search] ;;
+        create)           hints=$_L[hint_create] ;;
+        create_desc)      hints=$_L[hint_create_desc] ;;
+        delete|delete_multi) hints=$_L[hint_delete] ;;
+        *)                hints=$_L[hint_normal] ;;
     esac
+    printf '  %s%s%s%s  %s%s%s\n' "$_B" "$_FC" "$_L[title]" "$_R" "$_D" "$hints" "$_R"
     (( n++ ))
 
     # Separator
@@ -142,7 +203,7 @@ _draw() {
     (( max_vis < 3 )) && max_vis=3
 
     if (( ftotal == 0 )); then
-        printf '\e[2K  %sNo matching branches%s\n' "$_D" "$_R"
+        printf '\e[2K  %s%s%s\n' "$_D" "$_L[no_match]" "$_R"
         (( n++ ))
     else
         local vs=1 ve=$ftotal
@@ -205,18 +266,22 @@ _draw() {
         search)
             printf '  %s/%s%s%s▏%s\n' "$_FY" "$_R" "$_query" "$_D" "$_R" ;;
         create)
-            printf '  %sBranch name:%s %s%s▏%s\n' "$_FY" "$_R" "$_input" "$_D" "$_R" ;;
+            printf '  %s%s%s %s%s▏%s\n' "$_FY" "$_L[branch_name]" "$_R" "$_input" "$_D" "$_R" ;;
         create_desc)
-            printf '  %sDescription:%s %s%s▏%s\n' "$_FY" "$_R" "$_input" "$_D" "$_R" ;;
+            printf '  %s%s%s %s%s▏%s\n' "$_FY" "$_L[description]" "$_R" "$_input" "$_D" "$_R" ;;
         delete)
-            printf '  %sDelete "%s" ?%s (y/n)\n' "$_FR" "${_br[$_fidx[$_sel]]}" "$_R" ;;
+            local prompt; printf -v prompt "$_L[delete_single]" "${_br[$_fidx[$_sel]]}"
+            printf '  %s%s%s (y/n)\n' "$_FR" "$prompt" "$_R" ;;
         delete_multi)
-            printf '  %sDelete %d marked branches ?%s (y/n)\n' "$_FR" "$mcnt" "$_R" ;;
+            local prompt; printf -v prompt "$_L[delete_multi]" "$mcnt"
+            printf '  %s%s%s (y/n)\n' "$_FR" "$prompt" "$_R" ;;
         *)
             if (( mcnt > 0 )); then
-                printf '  %s%d marked · d delete marked · esc clear marks%s\n' "$_FY" "$mcnt" "$_R"
+                local ft; printf -v ft "$_L[marked_footer]" "$mcnt"
+                printf '  %s%s%s\n' "$_FY" "$ft" "$_R"
             elif (( ftotal > 0 && ftotal < ${#_br} )); then
-                printf '  %s(%d/%d · filter: "%s" · esc clear)%s\n' "$_D" "$_sel" "$ftotal" "$_query" "$_R"
+                local ft; printf -v ft "$_L[filter_footer]" "$_sel" "$ftotal" "$_query"
+                printf '  %s%s%s\n' "$_D" "$ft" "$_R"
             elif (( ftotal > max_vis )); then
                 printf '  %s(%d/%d)%s\n' "$_D" "$_sel" "$ftotal" "$_R"
             else
@@ -227,7 +292,6 @@ _draw() {
 
     _drawn=$n
 
-    # Wipe stale lines from a previous taller frame
     if (( n < prev )); then
         repeat $(( prev - n )) { printf '\e[2K\n' }
         printf '\e[%dA' "$(( prev - n ))"
@@ -295,9 +359,10 @@ _read_key() {
 
 # ─── Main ─────────────────────────────────────────────
 main() {
-    [[ -t 0 && -t 1 ]] || { print -u2 "fatal: requires an interactive terminal"; return 1 }
+    _i18n_init
+    [[ -t 0 && -t 1 ]] || { print -u2 "$_L[err_not_tty]"; return 1 }
     _load || return 1
-    (( ${#_br} )) || { print -u2 "No branches found"; return 1 }
+    (( ${#_br} )) || { print -u2 "$_L[err_no_branch]"; return 1 }
 
     _apply_filter
     _select_branch "$_cur"
@@ -325,7 +390,7 @@ main() {
             local ri=$_fidx[$_sel]
             local b=${_br[$ri]}
             if [[ "$b" == "$_cur" ]]; then
-                _msg="Cannot mark the current branch"
+                _msg=$_L[msg_no_mark_cur]
                 continue
             fi
             if (( ${+_marked[$b]} )); then
@@ -351,7 +416,7 @@ main() {
                     fi ;;
                 create_desc)
                     [[ -n "$_input" ]] && git config "branch.$_newbr.description" "$_input"
-                    _msg="Created '$_newbr'"
+                    printf -v _msg "$_L[msg_created]" "$_newbr"
                     _mode=normal; _input=""
                     _load; _query=""; _apply_filter
                     _select_branch "$_newbr" ;;
@@ -362,7 +427,8 @@ main() {
                     if [[ "${_br[$ri]}" != "$_cur" ]]; then
                         git checkout "${_br[$ri]}"
                     else
-                        print "Already on '${_br[$ri]}'"
+                        local m; printf -v m "$_L[msg_already_on]" "${_br[$ri]}"
+                        print "$m"
                     fi
                     return 0 ;;
             esac ;;
@@ -381,7 +447,7 @@ main() {
                 (( ftotal == 0 )) && continue
                 local ri=$_fidx[$_sel]
                 if [[ "${_br[$ri]}" == "$_cur" ]]; then
-                    _msg="Cannot delete the current branch"
+                    _msg=$_L[msg_no_del_cur]
                 else
                     _mode=delete
                 fi
@@ -397,7 +463,7 @@ main() {
                     if (( $? )); then
                         _msg="${out#error: }"
                     else
-                        _msg="Deleted '${_br[$ri]}'"
+                        printf -v _msg "$_L[msg_deleted]" "${_br[$ri]}"
                     fi ;;
                 delete_multi)
                     local ok=0 fail=0
@@ -405,8 +471,11 @@ main() {
                         git branch -d "$b" 2>/dev/null && (( ok++ )) || (( fail++ ))
                     done
                     _marked=()
-                    _msg="Deleted $ok branch(es)"
-                    (( fail )) && _msg+=", $fail failed" ;;
+                    printf -v _msg "$_L[msg_deleted_n]" "$ok"
+                    if (( fail )); then
+                        local fm; printf -v fm "$_L[msg_failed]" "$fail"
+                        _msg+="$fm"
+                    fi ;;
             esac
             _mode=normal
             _load; _apply_filter
