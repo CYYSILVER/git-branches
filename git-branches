@@ -4,9 +4,10 @@
 #
 #   j / k / ↑ / ↓   navigate
 #   enter            checkout selected branch
-#   space            toggle mark for multi-select
+#   space            toggle mark (single)
+#   v                visual range select (vim-like)
 #   c                create new branch (with description)
-#   d                delete selected / marked branches
+#   d                delete selected / marked / visual range
 #   r                edit description for selected branch
 #   /                search / filter branches
 #   q / esc          quit
@@ -35,7 +36,8 @@ typeset -gA _L
 _i18n_zh() {
     _L=(
         title            "Git 分支"
-        hint_normal      "· j/k ↑↓ 移动 · ⏎ 切换 · ␣ 标记 · / 搜索 · c 新建 · d 删除 · r 描述 · q 退出"
+        hint_normal      "· j/k ↑↓ · ⏎ 切换 · ␣ 标记 · v 选区 · / 搜索 · c 新建 · d 删除 · r 描述 · q 退出"
+        hint_visual      "· j/k ↑↓ 扩展 · ␣ 标记选区 · d 删除选区 · esc 取消"
         hint_search      "· ↑↓ 移动 · 回车切换 · esc 取消"
         hint_create      "· 回车确认 · esc 取消"
         hint_create_desc "· 回车确认 · esc 跳过"
@@ -45,6 +47,7 @@ _i18n_zh() {
         description      "分支描述:"
         delete_single    '删除 "%s" ?'
         delete_multi     '删除 %d 个标记的分支 ?'
+        visual_footer    '已选择 %d 个分支'
         marked_footer    '%d 个已标记 · d 删除标记 · esc 清除标记'
         filter_footer    '(%d/%d · 筛选: "%s" · esc 清除)'
         msg_no_mark_cur  "无法标记当前分支"
@@ -63,7 +66,8 @@ _i18n_zh() {
 _i18n_en() {
     _L=(
         title            "Git Branches"
-        hint_normal      "· j/k ↑↓ · ⏎ checkout · ␣ mark · /search · c new · d del · r desc · q quit"
+        hint_normal      "· j/k ↑↓ · ⏎ checkout · ␣ mark · v select · /search · c new · d del · r desc · q quit"
+        hint_visual      "· j/k ↑↓ extend · ␣ mark range · d del range · esc cancel"
         hint_search      "· ↑↓ navigate · enter checkout · esc cancel"
         hint_create      "· enter confirm · esc cancel"
         hint_create_desc "· enter confirm · esc skip"
@@ -73,6 +77,7 @@ _i18n_en() {
         description      "Description:"
         delete_single    'Delete "%s" ?'
         delete_multi     'Delete %d marked branches ?'
+        visual_footer    '%d branch(es) selected'
         marked_footer    '%d marked · d delete marked · esc clear marks'
         filter_footer    '(%d/%d · filter: "%s" · esc clear)'
         msg_no_mark_cur  "Cannot mark the current branch"
@@ -118,7 +123,7 @@ _vtrunc() {
 typeset -ga  _br _desc _fidx
 typeset -gA  _marked
 typeset -g   _cur _query="" _input="" _action _mode=normal _msg="" _newbr=""
-typeset -gi  _sel=1 _drawn=0
+typeset -gi  _sel=1 _drawn=0 _vsel=0
 typeset -g   _saved
 
 # ─── Load branches sorted by most-recent checkout ────
@@ -202,7 +207,9 @@ _draw() {
         create)           hints=$_L[hint_create] ;;
         create_desc)      hints=$_L[hint_create_desc] ;;
         delete|delete_multi) hints=$_L[hint_delete] ;;
-        *)                hints=$_L[hint_normal] ;;
+        *)
+            if (( _vsel > 0 )); then hints=$_L[hint_visual]
+            else hints=$_L[hint_normal]; fi ;;
     esac
     local hints_max=$(( cols - ${#_L[title]} * 2 - 6 ))
     _vtrunc "$hints" "$hints_max"; hints=$REPLY
@@ -247,10 +254,15 @@ _draw() {
             printf '\e[2K'
             local ri=$_fidx[$i]
             local b=${_br[$ri]} d=${_desc[$ri]}
-            local ic=0 is=0 im=0
+            local ic=0 is=0 im=0 iv=0
             [[ "$b" == "$_cur" ]] && ic=1
             (( i == _sel )) && is=1
             (( ${+_marked[$b]} )) && im=1
+            if (( _vsel > 0 )); then
+                local vlo=$(( _vsel < _sel ? _vsel : _sel ))
+                local vhi=$(( _vsel > _sel ? _vsel : _sel ))
+                (( i >= vlo && i <= vhi )) && iv=1
+            fi
             _vtrunc "$d" "$dw"; d=$REPLY
 
             local mk=" "
@@ -258,9 +270,12 @@ _draw() {
             (( im )) && mk="●"
 
             if (( is )); then
-                local bg=$_HL; (( ic )) && bg=$_HC
+                local bg=$_HL; (( ic || iv )) && bg=$_HC
                 printf ' %s %s %-*s  %s%s\e[K%s\n' \
                     "$bg$_FW$_B" "$mk" "$nw" "$b" "$_FY" "$d" "$_R"
+            elif (( iv )); then
+                printf ' %s %s %-*s  %s%s\e[K%s\n' \
+                    "$_HL$_FW" "$mk" "$nw" "$b" "$_FY" "$d" "$_R"
             elif (( ic )); then
                 printf '  %s%s %-*s%s  %s%s%s\n' \
                     "$_FG$_B" "$mk" "$nw" "$b" "$_R" "$_D" "$d" "$_R"
@@ -296,7 +311,12 @@ _draw() {
             local prompt; printf -v prompt "$_L[delete_multi]" "$mcnt"
             printf '  %s%s%s (y/n)\n' "$_FR" "$prompt" "$_R" ;;
         *)
-            if (( mcnt > 0 )); then
+            if (( _vsel > 0 )); then
+                local vlo=$(( _vsel < _sel ? _vsel : _sel ))
+                local vhi=$(( _vsel > _sel ? _vsel : _sel ))
+                local ft; printf -v ft "$_L[visual_footer]" "$(( vhi - vlo + 1 ))"
+                printf '  %s%s%s\n' "$_FC" "$ft" "$_R"
+            elif (( mcnt > 0 )); then
                 local ft; printf -v ft "$_L[marked_footer]" "$mcnt"
                 printf '  %s%s%s\n' "$_FY" "$ft" "$_R"
             elif (( ftotal > 0 && ftotal < ${#_br} )); then
@@ -368,7 +388,7 @@ _read_key() {
         *)
             case "$c" in
                 j) _action=down;; k) _action=up;;
-                ' ') _action=toggle;;
+                ' ') _action=toggle;; v) _action=visual;;
                 r) _action=rename;; q) _action=quit;;
                 d) _action=delete;; c) _action=create;;
                 /) _action=search;;
@@ -404,21 +424,28 @@ main() {
         up)    (( _sel > 1 ))      && (( _sel-- )) ;;
         down)  (( _sel < ftotal )) && (( _sel++ )) ;;
 
-        # ── Toggle mark for multi-select ──────────────
+        # ── Toggle mark ──────────────────────────────
         toggle)
             (( ftotal == 0 )) && continue
-            local ri=$_fidx[$_sel]
-            local b=${_br[$ri]}
-            if [[ "$b" == "$_cur" ]]; then
-                _msg=$_L[msg_no_mark_cur]
-                continue
-            fi
-            if (( ${+_marked[$b]} )); then
-                unset "_marked[$b]"
+            if (( _vsel > 0 )); then
+                local vlo=$(( _vsel < _sel ? _vsel : _sel ))
+                local vhi=$(( _vsel > _sel ? _vsel : _sel ))
+                local vi
+                for (( vi = vlo; vi <= vhi; vi++ )); do
+                    local ri=$_fidx[$vi] b=${_br[$ri]}
+                    [[ "$b" == "$_cur" ]] && continue
+                    if (( ${+_marked[$b]} )); then unset "_marked[$b]"
+                    else _marked[$b]=1; fi
+                done
+                _vsel=0
             else
-                _marked[$b]=1
-            fi
-            (( _sel < ftotal )) && (( _sel++ )) ;;
+                local ri=$_fidx[$_sel] b=${_br[$ri]}
+                if [[ "$b" == "$_cur" ]]; then
+                    _msg=$_L[msg_no_mark_cur]; continue
+                fi
+                if (( ${+_marked[$b]} )); then unset "_marked[$b]"
+                else _marked[$b]=1; fi
+            fi ;;
 
         # ── Enter (context-dependent) ─────────────────
         enter)
@@ -453,15 +480,33 @@ main() {
                     return 0 ;;
             esac ;;
 
+        # ── Visual select (Vim-like V) ───────────────
+        visual)
+            (( ftotal == 0 )) && continue
+            if (( _vsel > 0 )); then _vsel=0
+            else _vsel=$_sel; fi ;;
+
         # ── Start search ──────────────────────────────
-        search)  _mode=search; _query=""; _apply_filter ;;
+        search)  _vsel=0; _mode=search; _query=""; _apply_filter ;;
 
         # ── Create branch ─────────────────────────────
         create)  _mode=create; _input="" ;;
 
         # ── Delete branch(es) ─────────────────────────
         delete)
-            if (( ${#_marked} > 0 )); then
+            if (( _vsel > 0 )); then
+                local vlo=$(( _vsel < _sel ? _vsel : _sel ))
+                local vhi=$(( _vsel > _sel ? _vsel : _sel ))
+                _marked=()
+                local vi
+                for (( vi = vlo; vi <= vhi; vi++ )); do
+                    local ri=$_fidx[$vi] b=${_br[$ri]}
+                    [[ "$b" == "$_cur" ]] && continue
+                    _marked[$b]=1
+                done
+                _vsel=0
+                (( ${#_marked} > 0 )) && _mode=delete_multi
+            elif (( ${#_marked} > 0 )); then
                 _mode=delete_multi
             else
                 (( ftotal == 0 )) && continue
@@ -556,7 +601,9 @@ main() {
 
         # ── Quit ──────────────────────────────────────
         quit)
-            if (( ${#_marked} > 0 )); then
+            if (( _vsel > 0 )); then
+                _vsel=0
+            elif (( ${#_marked} > 0 )); then
                 _marked=()
             elif [[ -n "$_query" ]]; then
                 _mode=normal; _query=""
