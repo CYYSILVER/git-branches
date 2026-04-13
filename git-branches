@@ -370,7 +370,7 @@ _clear() {
 
 # ─── Restore terminal ────────────────────────────────
 _cleanup() {
-    printf "$_SHOW"
+    printf '%s\e[?1049l' "$_SHOW"
     [[ -n "$_saved" ]] && stty "$_saved" 2>/dev/null
 }
 
@@ -430,7 +430,7 @@ main() {
 
     _saved=$(stty -g 2>/dev/null)
     stty -echo 2>/dev/null
-    printf "$_HIDE"
+    printf '\e[?1049h\e[2J\e[H%s' "$_HIDE"
     trap _cleanup EXIT INT TERM HUP
 
     while true; do
