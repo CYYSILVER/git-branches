@@ -432,14 +432,16 @@ main() {
                 local vhi=$(( _vsel > _sel ? _vsel : _sel ))
                 local vi
                 for (( vi = vlo; vi <= vhi; vi++ )); do
-                    local ri=$_fidx[$vi] b=${_br[$ri]}
+                    local ri=${_fidx[$vi]}
+                    local b=${_br[$ri]}
                     [[ "$b" == "$_cur" ]] && continue
                     if (( ${+_marked[$b]} )); then unset "_marked[$b]"
                     else _marked[$b]=1; fi
                 done
                 _vsel=0
             else
-                local ri=$_fidx[$_sel] b=${_br[$ri]}
+                local ri=${_fidx[$_sel]}
+                local b=${_br[$ri]}
                 if [[ "$b" == "$_cur" ]]; then
                     _msg=$_L[msg_no_mark_cur]; continue
                 fi
@@ -500,7 +502,8 @@ main() {
                 _marked=()
                 local vi
                 for (( vi = vlo; vi <= vhi; vi++ )); do
-                    local ri=$_fidx[$vi] b=${_br[$ri]}
+                    local ri=${_fidx[$vi]}
+                    local b=${_br[$ri]}
                     [[ "$b" == "$_cur" ]] && continue
                     _marked[$b]=1
                 done
