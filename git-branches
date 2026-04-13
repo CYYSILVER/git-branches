@@ -536,7 +536,7 @@ main() {
                 delete_multi)
                     local ok=0 fail=0
                     for b in ${(k)_marked}; do
-                        git branch -d "$b" 2>/dev/null && (( ok++ )) || (( fail++ ))
+                        git branch -d "$b" >/dev/null 2>&1 && (( ok++ )) || (( fail++ ))
                     done
                     _marked=()
                     printf -v _msg "$_L[msg_deleted_n]" "$ok"
