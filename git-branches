@@ -566,10 +566,12 @@ main() {
                     for b in ${(k)_marked}; do
                         if git branch -d "$b" >/dev/null 2>&1; then
                             (( ok++ ))
-                            log+="${log:+$'\n'}${_FG}✓ $b"
+                            [[ -n "$log" ]] && log+=$'\n'
+                            log+="${_FG}✓ $b"
                         else
                             (( fail++ ))
-                            log+="${log:+$'\n'}${_FR}✗ $b"
+                            [[ -n "$log" ]] && log+=$'\n'
+                            log+="${_FR}✗ $b"
                             _force_br+=("$b")
                         fi
                     done
@@ -593,10 +595,12 @@ main() {
                     for b in $_force_br; do
                         if git branch -D "$b" >/dev/null 2>&1; then
                             (( ok++ ))
-                            log+="${log:+$'\n'}${_FG}✓ $b"
+                            [[ -n "$log" ]] && log+=$'\n'
+                            log+="${_FG}✓ $b"
                         else
                             (( fail++ ))
-                            log+="${log:+$'\n'}${_FR}✗ $b"
+                            [[ -n "$log" ]] && log+=$'\n'
+                            log+="${_FR}✗ $b"
                         fi
                     done
                     _force_br=()
