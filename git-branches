@@ -224,9 +224,12 @@ _draw() {
     (( n++ ))
 
     # Compute max visible rows
+    local -a _ml
+    [[ -n "$_msg" ]] && _ml=("${(@f)_msg}") || _ml=()
+    local _msgc=${#_ml}
     local max_vis=$(( rows - 5 ))
     [[ $_mode != normal ]] && (( max_vis-- ))
-    [[ -n "$_msg" ]] && (( max_vis-- ))
+    (( max_vis -= _msgc ))
     (( max_vis < 3 )) && max_vis=3
 
     if (( ftotal == 0 )); then
@@ -289,10 +292,13 @@ _draw() {
         done
     fi
 
-    # Status message (one-shot)
-    if [[ -n "$_msg" ]]; then
-        printf '\e[2K  %s%s%s\n' "$_FY" "$_msg" "$_R"
-        (( n++ ))
+    # Status message (one-shot, supports multi-line)
+    if (( _msgc > 0 )); then
+        local _mline
+        for _mline in "${_ml[@]}"; do
+            printf '\e[2K  %s%s%s\n' "$_FY" "$_mline" "$_R"
+            (( n++ ))
+        done
     fi
 
     # Footer / input prompt
@@ -529,21 +535,29 @@ main() {
                     local out
                     out=$(git branch -d "${_br[$ri]}" 2>&1)
                     if (( $? )); then
-                        _msg="${out#error: }"
+                        _msg="${_FR}✗ ${_br[$ri]}"$'\n'"${out#error: }"
                     else
-                        printf -v _msg "$_L[msg_deleted]" "${_br[$ri]}"
+                        _msg="${_FG}✓ ${_br[$ri]}"
                     fi ;;
                 delete_multi)
-                    local ok=0 fail=0
+                    local ok=0 fail=0 log=""
                     for b in ${(k)_marked}; do
-                        git branch -d "$b" >/dev/null 2>&1 && (( ok++ )) || (( fail++ ))
+                        if git branch -d "$b" >/dev/null 2>&1; then
+                            (( ok++ ))
+                            log+="${log:+$'\n'}${_FG}✓ $b"
+                        else
+                            (( fail++ ))
+                            log+="${log:+$'\n'}${_FR}✗ $b"
+                        fi
                     done
                     _marked=()
-                    printf -v _msg "$_L[msg_deleted_n]" "$ok"
+                    local summary
+                    printf -v summary "$_L[msg_deleted_n]" "$ok"
                     if (( fail )); then
                         local fm; printf -v fm "$_L[msg_failed]" "$fail"
-                        _msg+="$fm"
-                    fi ;;
+                        summary+="$fm"
+                    fi
+                    _msg="${log}"$'\n'"${summary}" ;;
             esac
             _mode=normal
             _load; _apply_filter
