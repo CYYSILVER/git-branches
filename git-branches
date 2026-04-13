@@ -42,11 +42,14 @@ _i18n_zh() {
         hint_create      "· 回车确认 · esc 取消"
         hint_create_desc "· 回车确认 · esc 跳过"
         hint_delete      "· y 确认删除 · 其他键取消"
+        hint_force       "· y 强制删除 · 其他键跳过"
         no_match         "没有匹配的分支"
         branch_name      "分支名称:"
         description      "分支描述:"
         delete_single    '删除 "%s" ?'
         delete_multi     '删除 %d 个标记的分支 ?'
+        force_single     '"%s" 未合并，强制删除?'
+        force_multi      '%d 个分支未合并，强制删除?'
         visual_footer    '已选择 %d 个分支'
         marked_footer    '%d 个已标记 · d 删除标记 · esc 清除标记'
         filter_footer    '(%d/%d · 筛选: "%s" · esc 清除)'
@@ -72,11 +75,14 @@ _i18n_en() {
         hint_create      "· enter confirm · esc cancel"
         hint_create_desc "· enter confirm · esc skip"
         hint_delete      "· y confirm delete · any other key cancel"
+        hint_force       "· y force delete · any other key skip"
         no_match         "No matching branches"
         branch_name      "Branch name:"
         description      "Description:"
         delete_single    'Delete "%s" ?'
         delete_multi     'Delete %d marked branches ?'
+        force_single     '"%s" is not merged, force delete?'
+        force_multi      '%d branch(es) not merged, force delete?'
         visual_footer    '%d branch(es) selected'
         marked_footer    '%d marked · d delete marked · esc clear marks'
         filter_footer    '(%d/%d · filter: "%s" · esc clear)'
@@ -120,7 +126,7 @@ _vtrunc() {
 }
 
 # ─── State ────────────────────────────────────────────
-typeset -ga  _br _desc _fidx
+typeset -ga  _br _desc _fidx _force_br
 typeset -gA  _marked
 typeset -g   _cur _query="" _input="" _action _mode=normal _msg="" _newbr=""
 typeset -gi  _sel=1 _drawn=0 _vsel=0
@@ -207,6 +213,7 @@ _draw() {
         create)           hints=$_L[hint_create] ;;
         create_desc)      hints=$_L[hint_create_desc] ;;
         delete|delete_multi) hints=$_L[hint_delete] ;;
+        force_delete) hints=$_L[hint_force] ;;
         *)
             if (( _vsel > 0 )); then hints=$_L[hint_visual]
             else hints=$_L[hint_normal]; fi ;;
@@ -316,6 +323,14 @@ _draw() {
         delete_multi)
             local prompt; printf -v prompt "$_L[delete_multi]" "$mcnt"
             printf '  %s%s%s (y/n)\n' "$_FR" "$prompt" "$_R" ;;
+        force_delete)
+            local prompt
+            if (( ${#_force_br} == 1 )); then
+                printf -v prompt "$_L[force_single]" "${_force_br[1]}"
+            else
+                printf -v prompt "$_L[force_multi]" "${#_force_br}"
+            fi
+            printf '  %s%s%s (y/n)\n' "$_FR" "$prompt" "$_R" ;;
         *)
             if (( _vsel > 0 )); then
                 local vlo=$(( _vsel < _sel ? _vsel : _sel ))
@@ -388,7 +403,7 @@ _read_key() {
                 $'\x7f'|$'\b') _action=backspace ;;
                 *)              _action="c$c" ;;
             esac ;;
-        delete|delete_multi)
+        delete|delete_multi|force_delete)
             [[ "$c" == y || "$c" == Y ]] && { _action=confirm; return }
             _action=cancel ;;
         *)
@@ -532,15 +547,22 @@ main() {
             case $_mode in
                 delete)
                     local ri=$_fidx[$_sel]
+                    local b=${_br[$ri]}
                     local out
-                    out=$(git branch -d "${_br[$ri]}" 2>&1)
+                    out=$(git branch -d "$b" 2>&1)
                     if (( $? )); then
-                        _msg="${_FR}✗ ${_br[$ri]}"$'\n'"${out#error: }"
+                        _msg="${_FR}✗ $b"$'\n'"${out#error: }"
+                        _force_br=("$b")
+                        _mode=force_delete
                     else
-                        _msg="${_FG}✓ ${_br[$ri]}"
+                        _msg="${_FG}✓ $b"
+                        _mode=normal
+                        _load; _apply_filter
+                        (( _sel > ${#_fidx} )) && _sel=${#_fidx}
                     fi ;;
                 delete_multi)
                     local ok=0 fail=0 log=""
+                    _force_br=()
                     for b in ${(k)_marked}; do
                         if git branch -d "$b" >/dev/null 2>&1; then
                             (( ok++ ))
@@ -548,6 +570,7 @@ main() {
                         else
                             (( fail++ ))
                             log+="${log:+$'\n'}${_FR}✗ $b"
+                            _force_br+=("$b")
                         fi
                     done
                     _marked=()
@@ -557,11 +580,37 @@ main() {
                         local fm; printf -v fm "$_L[msg_failed]" "$fail"
                         summary+="$fm"
                     fi
-                    _msg="${log}"$'\n'"${summary}" ;;
-            esac
-            _mode=normal
-            _load; _apply_filter
-            (( _sel > ${#_fidx} )) && _sel=${#_fidx} ;;
+                    _msg="${log}"$'\n'"${summary}"
+                    _load; _apply_filter
+                    (( _sel > ${#_fidx} )) && _sel=${#_fidx}
+                    if (( fail > 0 )); then
+                        _mode=force_delete
+                    else
+                        _mode=normal
+                    fi ;;
+                force_delete)
+                    local ok=0 fail=0 log=""
+                    for b in $_force_br; do
+                        if git branch -D "$b" >/dev/null 2>&1; then
+                            (( ok++ ))
+                            log+="${log:+$'\n'}${_FG}✓ $b"
+                        else
+                            (( fail++ ))
+                            log+="${log:+$'\n'}${_FR}✗ $b"
+                        fi
+                    done
+                    _force_br=()
+                    local summary
+                    printf -v summary "$_L[msg_deleted_n]" "$ok"
+                    if (( fail )); then
+                        local fm; printf -v fm "$_L[msg_failed]" "$fail"
+                        summary+="$fm"
+                    fi
+                    _msg="${log}"$'\n'"${summary}"
+                    _mode=normal
+                    _load; _apply_filter
+                    (( _sel > ${#_fidx} )) && _sel=${#_fidx} ;;
+            esac ;;
 
         # ── Cancel current mode ───────────────────────
         cancel)
@@ -577,6 +626,8 @@ main() {
                     _select_branch "$_newbr" ;;
                 delete|delete_multi)
                     _mode=normal ;;
+                force_delete)
+                    _force_br=(); _mode=normal ;;
             esac ;;
 
         # ── Text input: backspace ─────────────────────
