@@ -129,7 +129,7 @@ _vtrunc() {
 typeset -ga  _br _desc _fidx _force_br
 typeset -gA  _marked
 typeset -g   _cur _query="" _input="" _action _mode=normal _msg="" _newbr=""
-typeset -gi  _sel=1 _drawn=0 _vsel=0
+typeset -gi  _sel=1 _vsel=0
 typeset -g   _saved
 
 # ─── Load branches sorted by most-recent checkout ────
@@ -200,10 +200,10 @@ _select_branch() {
 _draw() {
     local cols=$COLUMNS rows=$LINES
     local ftotal=${#_fidx}
-    local prev=$_drawn n=0
+    local n=0
     local mcnt=${#_marked}
 
-    (( prev > 0 )) && printf '\e[%dA' "$prev"
+    printf '\e[H'
 
     # Header
     printf '\e[2K'
@@ -351,21 +351,12 @@ _draw() {
     esac
     (( n++ ))
 
-    _drawn=$n
-
-    if (( n < prev )); then
-        repeat $(( prev - n )) { printf '\e[2K\n' }
-        printf '\e[%dA' "$(( prev - n ))"
-    fi
+    printf '\e[J'
 }
 
 # ─── Clear drawn UI ──────────────────────────────────
 _clear() {
-    (( _drawn )) || return 0
-    printf '\e[%dA' "$_drawn"
-    repeat $_drawn { printf '\e[2K\n' }
-    printf '\e[%dA' "$_drawn"
-    _drawn=0
+    printf '\e[2J\e[H'
 }
 
 # ─── Restore terminal ────────────────────────────────
@@ -668,8 +659,7 @@ main() {
             _desc[$ri]="${d%%$'\n'*}"
             _saved=$(stty -g 2>/dev/null)
             stty -echo 2>/dev/null
-            printf "$_HIDE"
-            _drawn=0 ;;
+            printf '\e[?1049h\e[2J\e[H%s' "$_HIDE" ;;
 
         # ── Quit ──────────────────────────────────────
         quit)
