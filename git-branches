@@ -60,6 +60,7 @@ _i18n_zh() {
         msg_deleted_n    '已删除 %d 个分支'
         msg_failed       ', %d 个失败'
         msg_already_on   "已在 '%s' 分支上"
+        msg_checkout_desc "分支描述: %s"
         err_not_repo     "错误: 不是 git 仓库"
         err_no_branch    "没有找到分支"
         err_not_tty      "错误: 需要交互式终端"
@@ -93,6 +94,7 @@ _i18n_en() {
         msg_deleted_n    'Deleted %d branch(es)'
         msg_failed       ', %d failed'
         msg_already_on   "Already on '%s'"
+        msg_checkout_desc "Branch description: %s"
         err_not_repo     "fatal: not a git repository"
         err_no_branch    "No branches found"
         err_not_tty      "fatal: requires an interactive terminal"
@@ -484,11 +486,19 @@ main() {
                 *)
                     (( ftotal == 0 )) && continue
                     local ri=$_fidx[$_sel]
+                    local target=${_br[$ri]}
+                    local desc=${_desc[$ri]}
                     _clear; _cleanup; trap - EXIT INT TERM HUP
-                    if [[ "${_br[$ri]}" != "$_cur" ]]; then
-                        git checkout "${_br[$ri]}"
+                    if [[ "$target" != "$_cur" ]]; then
+                        git checkout "$target"
+                        local checkout_status=$?
+                        if (( checkout_status == 0 && ${#desc} > 0 )); then
+                            local m; printf -v m "$_L[msg_checkout_desc]" "$desc"
+                            print "$m"
+                        fi
+                        return $checkout_status
                     else
-                        local m; printf -v m "$_L[msg_already_on]" "${_br[$ri]}"
+                        local m; printf -v m "$_L[msg_already_on]" "$target"
                         print "$m"
                     fi
                     return 0 ;;
